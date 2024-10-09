@@ -56,7 +56,7 @@ class DownloadService(ABC):
 class SABnzbdService(DownloadService):
     def __init__(self, host, port, api_key, logger):
         super().__init__(logger)
-        base_url=f"http://{host}:{port}"
+        self.base_url=f"http://{host}:{port}"
 
     def _call_api(self, mode):
         try:
