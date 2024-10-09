@@ -58,15 +58,24 @@ class SABnzbdService(DownloadService):
         super().__init__(logger)
         base_url=f"http://{host}:{port}"
 
-        self.client = SabnzbdApi(api_key=api_key, base_url=base_url)
+    def _call_api(self, mode):
+        try:
+            url = f"{self.base_url}?mode={mode}&apikey={self.api_key}"
+            response = requests.get(url)
+            if response.status_code == 200:
+                self.logger.info(f"SABnzbd {mode} successful.")
+            else:
+                self.logger.error(f"Failed to {mode} SABnzbd. Status code: {response.status_code}")
+        except requests.RequestException as e:
+            self.logger.error(f"Error communicating with SABnzbd: {e}")
 
     def pause(self):
         self.logger.info("Pausing SABnzbd downloads.")
-        self.client.pause_queue()
+        self._call_api("pause")
 
     def resume(self):
         self.logger.info("Resuming SABnzbd downloads.")
-        self.client.resume_queue()
+        self._call_api("resume")
 
 
 class DelugeService(DownloadService):
