@@ -56,7 +56,9 @@ class DownloadService(ABC):
 class SABnzbdService(DownloadService):
     def __init__(self, host, port, api_key, logger):
         super().__init__(logger)
-        self.client = SabnzbdApi(api_key=api_key, host=f"http://{host}:{port}")
+        base_url=f"http://{host}:{port}"
+
+        self.client = SabnzbdApi(api_key=api_key, base_url=base_url)
 
     def pause(self):
         self.logger.info("Pausing SABnzbd downloads.")
