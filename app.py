@@ -137,7 +137,7 @@ class MediaSessionManager(ABC):
         ...
 
 
-class JellyfinSessionManager(MediaSessionManager):
+class JellyfinMediaServer(MediaSessionManager):
     def __init__(self, host, port, api_key, logger):
         api_url = f"http://{host}:{port}"
         super().__init__(api_url, api_key, logger)
@@ -166,7 +166,7 @@ class JellyfinSessionManager(MediaSessionManager):
         return False
 
 
-class PlexSessionManager(MediaSessionManager):
+class PlexMediaServer(MediaSessionManager):
     def __init__(self, host, port, api_key, logger):
         api_url = f"http://{host}:{port}/api"
         super().__init__(api_url, api_key, logger)
@@ -187,30 +187,30 @@ class PlexSessionManager(MediaSessionManager):
             return False
 
 
-# class EmbySessionManager(MediaSessionManager):
-#     def __init__(self, host, port, api_key, logger):
-#         api_url = f"http://{host}:{port}/api"
-#         super().__init__(api_url, api_key, logger)
+class EmbyMediaServer(MediaSessionManager):
+    def __init__(self, host, port, api_key, logger):
+        api_url = f"http://{host}:{port}/api"
+        super().__init__(api_url, api_key, logger)
 
-#     def _fetch_sessions(self):
-#         headers = {'X-Emby-Token': self.api_key}
-#         try:
-#             response = requests.get(f'{self.api_url}/Sessions', headers=headers)
-#             response.raise_for_status()
-#             return response.json()
-#         except requests.RequestException as e:
-#             self.logger.error(f"Error fetching Emby sessions: {e}")
-#             return []
+    def _fetch_sessions(self):
+        headers = {'X-Emby-Token': self.api_key}
+        try:
+            response = requests.get(f'{self.api_url}/Sessions', headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            self.logger.error(f"Error fetching Emby sessions: {e}")
+            return []
 
 
 class MediaServerManager:
     def __init__(self, logger):
         self.logger = logger
-        self.session_managers = []
+        self.media_servers = []
 
         # Initialize Jellyfin if environment variables are set
         if os.getenv('JELLYFIN_HOST'):
-            self.session_managers.append(JellyfinSessionManager(
+            self.media_servers.append(JellyfinMediaServer(
                 host=os.getenv('JELLYFIN_HOST'),
                 port=os.getenv('JELLYFIN_PORT', '8096'),
                 api_key=os.getenv('JELLYFIN_API_KEY'),
@@ -219,7 +219,7 @@ class MediaServerManager:
 
         # Initialize Plex if environment variables are set
         if os.getenv('PLEX_HOST'):
-            self.session_managers.append(PlexSessionManager(
+            self.media_servers.append(PlexMediaServer(
                 host=os.getenv('PLEX_HOST'),
                 port=os.getenv('PLEX_PORT', '32400'),
                 api_key=os.getenv('PLEX_API_KEY'),
@@ -228,7 +228,7 @@ class MediaServerManager:
 
         # Initialize Emby if environment variables are set
         if os.getenv('EMBY_HOST'):
-            self.session_managers.append(EmbySessionManager(
+            self.media_servers.append(EmbyMediaServer(
                 host=os.getenv('EMBY_HOST'),
                 port=os.getenv('EMBY_PORT', '8096'),
                 api_key=os.getenv('EMBY_API_KEY'),
@@ -236,8 +236,8 @@ class MediaServerManager:
             ))
 
     def has_active_sessions(self):
-        for manager in self.session_managers:
-            if manager.has_active_sessions():
+        for media_server in self.media_servers:
+            if media_server.has_active_sessions():
                 return True
         return False
 
