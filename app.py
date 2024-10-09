@@ -108,6 +108,23 @@ class DelugeService:
             logger.error(f"Error connecting to Deluge Web UI: {e}")
             raise
 
+    def _ensure_authenticated(self):
+        try:
+            self.client.get_hosts()  # Attempt to get hosts to check authentication
+        except DelugeWebClientError as e:
+            if 'Not authenticated' in str(e):
+                logger.warning("Session expired or not authenticated. Re-authenticating...")
+                self.connect()
+
+    def get_all_torrent_ids(self):
+        try:
+            self._ensure_authenticated()
+            torrents_status = self.client.get_torrents_status()
+            return list(torrents_status.result.keys())
+        except DelugeWebClientError as e:
+            logger.error(f"Error fetching torrent status on Deluge: {e}")
+            return []
+
     def get_all_torrent_ids(self):
         try:
             torrents_status = self.client.get_torrents_status()
