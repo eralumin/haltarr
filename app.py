@@ -127,6 +127,60 @@ class QbittorrentService(DownloadService):
         self.qbt_client.torrents.resume_all()
 
 
+class MediaServerHandler(ABC):
+    def __init__(self, name):
+        self.name = name
+        self.active_sessions = set()
+
+    @abstractmethod
+    def extract_event(self, data):
+        pass
+
+
+class JellyfinHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("jellyfin")
+
+    def extract_event(self, data):
+        if "Event" in data and "User" in data:
+            event = data['Event']
+            user = data['User']['Id']
+            if event == "media.play":
+                return "play", user
+            elif event == "media.stop":
+                return "stop", user
+        return None, None
+
+
+class PlexHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("plex")
+
+    def extract_event(self, data):
+        if "event" in data and "Account" in data:
+            event = data['event']
+            user = data['Account']['id']
+            if event == "media.play":
+                return "play", user
+            elif event == "media.stop":
+                return "stop", user
+        return None, None
+
+
+class EmbyHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("emby")
+
+    def extract_event(self, data):
+        if "NotificationType" in data and "Session" in data:
+            event = data['NotificationType']
+            user = data['Session']['UserId']
+            if event == "playbackstart":
+                return "play", user
+            elif event == "playbackstop":
+                return "stop", user
+        return None, None
+
 class MediaSessionManager:
     def __init__(self, logger):
         self.logger = logger
