@@ -59,6 +59,9 @@ To configure Jellyfin to send media events to Haltarr:
   - **Notification Types:**
     - `Playback Start`
     - `Playback Stop`
+  - **Request Headers:**
+    - **Key:** Content-Type
+      **Value:** application/json
 4. Click Save to apply the webhook.
 
 #### Plex Webhook Setup
