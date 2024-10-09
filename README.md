@@ -4,10 +4,10 @@
 
 # Haltarr
 
-**Haltarr** is a Python Flask-based service that pauses or resumes download clients (SABnzbd, Deluge, qBitTorrent) when media is played or stopped on media servers (Jellyfin, Plex,Emby). It also notifies Discord of these events via webhooks.
+**Haltarr** is a service that pauses or resumes download clients (SABnzbd, Deluge, qBitTorrent) when there is activity on media servers (Jellyfin, Plex, Emby). It also notifies Discord of these events via webhooks.
 
 ## Features
-- Pauses/Resumes SABnzbd, qBitTorrent and Deluge download clients based on media playback in Jellyfin, Plex and Emby.
+- Pauses/Resumes SABnzbd, qBitTorrent and Deluge download clients based on activiry from Jellyfin, Plex and Emby.
 - Sends notifications to Discord.
 
 ## Summary
@@ -20,6 +20,8 @@
 
 ### Environment Variables
 Set the following environment variables to configure Haltarr:
+
+- `CHECK_INTERVAL`: Interval between each Media Server activity check in seconds (default: `10`).
 
 #### Media Servers
 - `JELLYFIN_HOST`: Hostname or IP of your Jellyfin server.
@@ -62,6 +64,6 @@ Set the following environment variables to configure Haltarr:
 ### Running with Docker
 Build and run the Docker container:
 ```bash
-    docker build -t eralumin/controllarr .
-    docker run -d -p 5000:5000 --env-file .env eralumin/controllarr
+    docker build -t eralumin/haltarr .
+    docker run -d --env-file .env eralumin/haltarr
 ```
