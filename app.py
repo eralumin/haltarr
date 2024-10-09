@@ -180,12 +180,16 @@ class DownloadManager:
             service.resume()
 
 
+# Initialize download clients and media services once
+notifier = DiscordNotifier(webhook_url=os.getenv('DISCORD_WEBHOOK_URL'), logger=app.logger)
+download_manager = DownloadManager(notifier, app.logger)
+session_manager = MediaSessionManager(app.logger)
+
+
 @app.route('/api/v1/playback-events', methods=['POST'])
 def playback_events():
     data = request.json
     media_server, user, event_type = None, None, None
-
-    session_manager = MediaSessionManager(app.logger)
 
     for server, handler in session_manager.handlers.items():
         event_type, user = handler.extract_event(data)
@@ -198,9 +202,6 @@ def playback_events():
         return "Unrecognized event", 400
 
     session_manager.update_sessions(media_server, user, event_type)
-
-    notifier = DiscordNotifier(webhook_url=os.getenv('DISCORD_WEBHOOK_URL'), logger=app.logger)
-    download_manager = DownloadManager(notifier, app.logger)
 
     if event_type == "play":
         download_manager.pause_downloads()
