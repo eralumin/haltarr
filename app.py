@@ -77,7 +77,7 @@ class SABnzbdService(DownloadService):
         self._call_api("resume")
 
 
-class DelugeWebService(DownloadService):
+class DelugeService(DownloadService):
     def __init__(self, host, port, password, logger):
         super().__init__(logger)
 
