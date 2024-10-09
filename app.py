@@ -128,7 +128,8 @@ class QbittorrentService(DownloadService):
 
 
 class MediaServerHandler(ABC):
-    def __init__(self, name):
+    def __init__(self, logger, name):
+        self.logger = logger
         self.name = name
         self.active_sessions = set()
 
@@ -138,48 +139,61 @@ class MediaServerHandler(ABC):
 
 
 class JellyfinHandler(MediaServerHandler):
-    def __init__(self):
-        super().__init__("jellyfin")
+    def __init__(self, logger):
+        super().__init__(logger=logger, name="jellyfin")
 
     def extract_event(self, data):
         if "Event" in data and "User" in data:
             event = data['Event']
             user = data['User']['Id']
             if event == "media.play":
+                self.logger.info(f"Jellyfin: User {user} started playing media.")
                 return "play", user
             elif event == "media.stop":
+                self.logger.info(f"Jellyfin: User {user} stopped playing media.")
                 return "stop", user
+
+        self.logger.warning("Jellyfin: No valid event found in data.")
         return None, None
 
 
 class PlexHandler(MediaServerHandler):
-    def __init__(self):
-        super().__init__("plex")
+    def __init__(self, logger):
+        super().__init__(logger=logger, name="plex")
 
     def extract_event(self, data):
         if "event" in data and "Account" in data:
             event = data['event']
             user = data['Account']['id']
             if event == "media.play":
+                self.logger.info(f"Plex: User {user} started playing media.")
                 return "play", user
             elif event == "media.stop":
+                self.logger.info(f"Plex: User {user} stopped playing media.")
                 return "stop", user
+
+        self.logger.warning("Plex: No valid event found in data.")
         return None, None
 
 
 class EmbyHandler(MediaServerHandler):
-    def __init__(self):
-        super().__init__("emby")
+    def __init__(self, logger):
+        super().__init__(logger=logger, name="emby")
 
     def extract_event(self, data):
         if "NotificationType" in data and "Session" in data:
             event = data['NotificationType']
             user = data['Session']['UserId']
             if event == "playbackstart":
+                self.logger.info(f"Emby: User {user} started playing media.")
                 return "play", user
             elif event == "playbackstop":
+                self.logger.info(f"Emby: User {user} stopped playing media.")
                 return "stop", user
+
+        self.logger.warning("Emby: No valid event found in data.")
         return None, None
+
 
 class MediaSessionManager:
     def __init__(self, logger):
