@@ -7,7 +7,6 @@ import requests
 
 from deluge_client import DelugeRPCClient
 from flask import Flask, request
-from pysabnzbd import SabnzbdApi
 
 app = Flask(__name__)
 
