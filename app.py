@@ -7,7 +7,7 @@ import requests
 from abc import ABC, abstractmethod
 from flask import Flask, request
 from deluge_client import DelugeRPCClient
-from pysabnzbd import Sabnzbd
+from pysabnzbd import SabnzbdApi
 
 app = Flask(__name__)
 
@@ -51,7 +51,7 @@ class DownloadService(ABC):
 
 class SABnzbdService(DownloadService):
     def __init__(self, host, port, api_key):
-        self.client = Sabnzbd(api_key=api_key, host=f"http://{host}:{port}")
+        self.client = SabnzbdApi(api_key=api_key, host=f"http://{host}:{port}")
 
     def pause(self):
         logging.info("Pausing SABnzbd downloads.")
