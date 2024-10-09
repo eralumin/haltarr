@@ -1,10 +1,8 @@
 import os
-
-from abc import ABC, abstractmethod
-
-import qbittorrentapi
+import logging
 import requests
-
+from abc import ABC, abstractmethod
+import qbittorrentapi
 from deluge_web_client import DelugeWebClient
 from flask import Flask, request
 
@@ -16,10 +14,7 @@ if __name__ != '__main__':
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
 
-# Track active playbacks
-active_sessions = {}
-
-
+# Abstract Notifier class
 class Notifier(ABC):
     @abstractmethod
     def send_message(self, message: str):
@@ -41,7 +36,7 @@ class DiscordNotifier(Notifier):
             self.logger.error(f"Failed to send message to Discord: {response.status_code}")
             raise Exception(f"Failed to send message to Discord: {response.status_code}")
 
-
+# Abstract DownloadService class
 class DownloadService(ABC):
     def __init__(self, logger):
         self.logger = logger
@@ -55,10 +50,12 @@ class DownloadService(ABC):
         pass
 
 
+# Concrete implementations of DownloadService for each client
 class SABnzbdService(DownloadService):
     def __init__(self, host, port, api_key, logger):
         super().__init__(logger)
-        self.base_url=f"http://{host}:{port}"
+        self.base_url = f"http://{host}:{port}"
+        self.api_key = api_key
 
     def _call_api(self, mode):
         try:
@@ -83,19 +80,17 @@ class SABnzbdService(DownloadService):
 class DelugeService(DownloadService):
     def __init__(self, host, port, password, logger):
         super().__init__(logger)
-
-        url=f"http://{host}:{port}"
+        url = f"http://{host}:{port}"
         self.client = DelugeWebClient(url=url, password=password)
 
     def _get_torrent_ids_or_empty_list(self):
         torrents = self.client.get_torrents_status()
         if torrents.result:
             return list(torrents.result.keys())
-
-        return list()
+        return []
 
     def pause(self):
-        self.logger.info("Pausing Deluge torrents")
+        self.logger.info("Pausing Deluge torrents.")
         try:
             torrent_ids = self._get_torrent_ids_or_empty_list()
             self.client.pause_torrents(torrent_ids)
@@ -103,7 +98,7 @@ class DelugeService(DownloadService):
             self.logger.error(f"Error pausing torrents: {e}")
 
     def resume(self):
-        self.logger.info("Resuming Deluge torrents")
+        self.logger.info("Resuming Deluge torrents.")
         try:
             torrent_ids = self._get_torrent_ids_or_empty_list()
             self.client.resume_torrents(torrent_ids)
@@ -130,113 +125,132 @@ class QbittorrentService(DownloadService):
         self.qbt_client.torrents.resume_all()
 
 
-class MediaServerHandler(ABC):
-    def __init__(self, logger, name):
+# Abstract MediaSessionManager class
+class MediaSessionManager(ABC):
+    def __init__(self, api_url, api_key, logger):
+        self.api_url = api_url
+        self.api_key = api_key
         self.logger = logger
-        self.name = name
-        self.active_sessions = set()
 
     @abstractmethod
-    def extract_event(self, data):
-        pass
+    def has_active_sessions(self):
+        ...
 
 
-class JellyfinHandler(MediaServerHandler):
-    def __init__(self, logger):
-        super().__init__(logger=logger, name="jellyfin")
+class JellyfinSessionManager(MediaSessionManager):
+    def __init__(self, host, port, api_key, logger):
+        api_url = f"http://{host}:{port}"
+        super().__init__(api_url, api_key, logger)
 
-    def extract_event(self, data):
-        if "Event" in data and "User" in data:
-            event = data['Event']
-            user = data['User']['Id']
-            if event == "media.play":
-                self.logger.info(f"Jellyfin: User {user} started playing media.")
-                return "play", user
-            elif event == "media.stop":
-                self.logger.info(f"Jellyfin: User {user} stopped playing media.")
-                return "stop", user
+    def _fetch_sessions(self):
+        headers = {'X-Emby-Token': self.api_key}
+        try:
+            response = requests.get(f'{self.api_url}/Sessions', headers=headers)
+            response.raise_for_status()
 
-        self.logger.warning("Jellyfin: No valid event found in data.")
-        return None, None
+            return response.json()
 
+        except requests.RequestException as e:
+            self.logger.error(f"Error fetching Jellyfin sessions: {e}")
+            return []
 
-class PlexHandler(MediaServerHandler):
-    def __init__(self, logger):
-        super().__init__(logger=logger, name="plex")
+    def has_active_sessions(self):
+        sessions = self._fetch_sessions()
+        for session in sessions:
 
-    def extract_event(self, data):
-        if "event" in data and "Account" in data:
-            event = data['event']
-            user = data['Account']['id']
-            if event == "media.play":
-                self.logger.info(f"Plex: User {user} started playing media.")
-                return "play", user
-            elif event == "media.stop":
-                self.logger.info(f"Plex: User {user} stopped playing media.")
-                return "stop", user
+            if session.get('IsActive'):
+                self.logger.info(f"Active session found: User {session['UserName']}, Session ID: {session['Id']}")
+                return True
 
-        self.logger.warning("Plex: No valid event found in data.")
-        return None, None
+        self.logger.info("No active sessions found.")
+        return False
 
 
-class EmbyHandler(MediaServerHandler):
-    def __init__(self, logger):
-        super().__init__(logger=logger, name="emby")
+class PlexSessionManager(MediaSessionManager):
+    def __init__(self, host, port, api_key, logger):
+        api_url = f"http://{host}:{port}/api"
+        super().__init__(api_url, api_key, logger)
 
-    def extract_event(self, data):
-        if "NotificationType" in data and "Session" in data:
-            event = data['NotificationType']
-            user = data['Session']['UserId']
-            if event == "playbackstart":
-                self.logger.info(f"Emby: User {user} started playing media.")
-                return "play", user
-            elif event == "playbackstop":
-                self.logger.info(f"Emby: User {user} stopped playing media.")
-                return "stop", user
+    def has_active_sessions(self):
+        headers = {'X-Plex-Token': self.api_key}
+        try:
+            response = requests.get(f'{self.api_url}/status/sessions', headers=headers)
+            response.raise_for_status()
 
-        self.logger.warning("Emby: No valid event found in data.")
-        return None, None
+            json = response.json()
+            total_active_sessions = json.get("MediaContainer", {}).get("size", 0)
+
+            return total_active_sessions > 0
+
+        except requests.RequestException as e:
+            self.logger.error(f"Error fetching Plex sessions: {e}")
+            return False
 
 
-class MediaSessionManager:
+# class EmbySessionManager(MediaSessionManager):
+#     def __init__(self, host, port, api_key, logger):
+#         api_url = f"http://{host}:{port}/api"
+#         super().__init__(api_url, api_key, logger)
+
+#     def _fetch_sessions(self):
+#         headers = {'X-Emby-Token': self.api_key}
+#         try:
+#             response = requests.get(f'{self.api_url}/Sessions', headers=headers)
+#             response.raise_for_status()
+#             return response.json()
+#         except requests.RequestException as e:
+#             self.logger.error(f"Error fetching Emby sessions: {e}")
+#             return []
+
+
+class MediaServerManager:
     def __init__(self, logger):
         self.logger = logger
-        self.handlers = {
-            "jellyfin": JellyfinHandler(logger),
-            "plex": PlexHandler(logger),
-            "emby": EmbyHandler(logger)
-        }
+        self.session_managers = []
 
-    def update_sessions(self, media_server, user, event_type):
-        handler = self.handlers.get(media_server)
-        if not handler:
-            self.logger.warning(f"Unknown media server: {media_server}")
-            return
+        # Initialize Jellyfin if environment variables are set
+        if os.getenv('JELLYFIN_HOST'):
+            self.session_managers.append(JellyfinSessionManager(
+                host=os.getenv('JELLYFIN_HOST'),
+                port=os.getenv('JELLYFIN_PORT', '8096'),
+                api_key=os.getenv('JELLYFIN_API_KEY'),
+                logger=logger
+            ))
 
-        if event_type == "play":
-            self.logger.info(f"User {user} started playing media on {media_server}.")
-            handler.active_sessions.add(user)
-        elif event_type == "stop":
-            self.logger.info(f"User {user} stopped playing media on {media_server}.")
-            handler.active_sessions.discard(user)
+        # Initialize Plex if environment variables are set
+        if os.getenv('PLEX_HOST'):
+            self.session_managers.append(PlexSessionManager(
+                host=os.getenv('PLEX_HOST'),
+                port=os.getenv('PLEX_PORT', '32400'),
+                api_key=os.getenv('PLEX_API_KEY'),
+                logger=logger
+            ))
 
-    def should_resume_downloads(self):
-        for handler in self.handlers.values():
-            if handler.active_sessions:
-                self.logger.info(f"Active sessions on {handler.name}: {handler.active_sessions}")
-                return False
-        return True
+        # Initialize Emby if environment variables are set
+        if os.getenv('EMBY_HOST'):
+            self.session_managers.append(EmbySessionManager(
+                host=os.getenv('EMBY_HOST'),
+                port=os.getenv('EMBY_PORT', '8096'),
+                api_key=os.getenv('EMBY_API_KEY'),
+                logger=logger
+            ))
+
+    def has_active_sessions(self):
+        for manager in self.session_managers:
+            if manager.has_active_sessions():
+                return True
+        return False
 
 
+# DownloadManager to manage download clients
 class DownloadManager:
     def __init__(self, notifier: Notifier, logger):
         self.notifier = notifier
         self.logger = logger
-        self.download_services = self.get_download_services()
+        self.download_services = self._initialize_services()
 
-    def get_download_services(self):
+    def _initialize_services(self):
         services = []
-        # SABnzbd
         if os.getenv('SABNZBD_HOST'):
             services.append(SABnzbdService(
                 host=os.getenv('SABNZBD_HOST'),
@@ -244,7 +258,6 @@ class DownloadManager:
                 api_key=os.getenv('SABNZBD_API_KEY'),
                 logger=self.logger
             ))
-        # Deluge
         if os.getenv('DELUGE_HOST'):
             services.append(DelugeService(
                 host=os.getenv('DELUGE_HOST'),
@@ -252,7 +265,6 @@ class DownloadManager:
                 password=os.getenv('DELUGE_PASSWORD'),
                 logger=self.logger
             ))
-        # qBittorrent
         if os.getenv('QBITTORRENT_HOST'):
             services.append(QbittorrentService(
                 host=os.getenv('QBITTORRENT_HOST'),
@@ -276,37 +288,19 @@ class DownloadManager:
             service.resume()
 
 
-# Initialize download clients and media services once
+# Initialize the notifier, media server manager, and download manager
 notifier = DiscordNotifier(webhook_url=os.getenv('DISCORD_WEBHOOK_URL'), logger=app.logger)
+media_server_manager = MediaServerManager(app.logger)
 download_manager = DownloadManager(notifier, app.logger)
-session_manager = MediaSessionManager(app.logger)
 
 
 @app.route('/api/v1/playback-events', methods=['POST'])
 def playback_events():
     app.logger.info(f"Received JSON payload: {request.json}")
 
-    data = request.json
-    media_server, user, event_type = None, None, None
-
-    app.logger.info("Evaluating media server handlers for event extraction...")
-
-    for server, handler in session_manager.handlers.items():
-        event_type, user = handler.extract_event(data)
-        if event_type and user:
-            media_server = server
-            break
-
-    if not media_server:
-        app.logger.warning("Unrecognized event or missing user/server information.")
-        return "Unrecognized event", 400
-
-    app.logger.info(f"Extracted event: {event_type} from {media_server} for user {user}")
-    session_manager.update_sessions(media_server, user, event_type)
-
-    if event_type == "play":
+    if media_server_manager.has_active_sessions():
         download_manager.pause_downloads()
-    elif event_type == "stop" and session_manager.should_resume_downloads():
+    else:
         download_manager.resume_downloads()
 
     return "OK", 200
