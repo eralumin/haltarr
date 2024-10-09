@@ -235,8 +235,8 @@ class DownloadManager:
             service.resume()
 
 
-@app.route('/media-webhook', methods=['POST'])
-def media_webhook():
+@app.route('/playback-events', methods=['POST'])
+def playback_events():
     data = request.json
     media_server, user, event_type = None, None, None
 
