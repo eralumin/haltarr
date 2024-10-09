@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 import requests
 import qbittorrentapi
 
-from deluge_web_client import DelugeWebClient, DelugeWebClientError
+from deluge_client import DelugeRPCClient
 
 
 # Configure Python built-in logger
@@ -61,6 +61,59 @@ class DownloadService(ABC):
         pass
 
 
+class DelugeService(DownloadService):
+    def __init__(self, host, port, username, password):
+        super().__init__()
+        self.client = DelugeRPCClient(host, port, username, password)
+
+    def connect(self):
+        try:
+            self.client.connect()
+            logger.info("Connected to Deluge daemon successfully.")
+        except Exception as e:
+            logger.error(f"Error connecting to Deluge daemon: {e}")
+            raise
+
+    def pause(self):
+        try:
+            logger.info("Pausing all torrents on Deluge...")
+            self.connect()
+
+            self.client.call('core.pause_all_torrents')
+            logger.info("All torrents paused successfully on Deluge.")
+        except Exception as e:
+            logger.error(f"Error pausing all torrents on Deluge: {e}")
+
+    def resume(self):
+        try:
+            logger.info("Resuming all torrents on Deluge...")
+            self.connect()
+
+            self.client.call('core.resume_all_torrents')
+            logger.info("All torrents resumed successfully on Deluge.")
+        except Exception as e:
+            logger.error(f"Error resuming all torrents on Deluge: {e}")
+
+
+class QbittorrentService(DownloadService):
+    def __init__(self, host, port, username, password):
+        super().__init__()
+        self.qbt_client = qbittorrentapi.Client(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+        )
+
+    def pause(self):
+        logger.info("Pausing qBittorrent downloads.")
+        self.qbt_client.torrents.pause_all()
+
+    def resume(self):
+        logger.info("Resuming qBittorrent downloads.")
+        self.qbt_client.torrents.resume_all()
+
+
 class SABnzbdService(DownloadService):
     def __init__(self, host, port, api_key):
         super().__init__()
@@ -89,92 +142,6 @@ class SABnzbdService(DownloadService):
     def resume(self):
         logger.info("Resuming SABnzbd downloads.")
         self._call_api("resume")
-
-
-from deluge_web_client import DelugeWebClient, DelugeWebClientError
-import logging
-
-logger = logging.getLogger(__name__)
-
-class DelugeService:
-    def __init__(self, host, port, password):
-        self.client = DelugeWebClient(url=f"http://{host}:{port}/", password=password)
-
-    def connect(self):
-        try:
-            self.client.login()
-            logger.info("Connected to Deluge Web UI successfully.")
-        except DelugeWebClientError as e:
-            logger.error(f"Error connecting to Deluge Web UI: {e}")
-            raise
-
-    def _ensure_authenticated(self):
-        try:
-            self.client.get_hosts()  # Attempt to get hosts to check authentication
-        except DelugeWebClientError as e:
-            if 'Not authenticated' in str(e):
-                logger.warning("Session expired or not authenticated. Re-authenticating...")
-                self.connect()
-
-    def get_all_torrent_ids(self):
-        try:
-            self._ensure_authenticated()
-            torrents_status = self.client.get_torrents_status()
-            return list(torrents_status.result.keys())
-        except DelugeWebClientError as e:
-            logger.error(f"Error fetching torrent status on Deluge: {e}")
-            return []
-
-    def get_all_torrent_ids(self):
-        try:
-            torrents_status = self.client.get_torrents_status()
-            return list(torrents_status.result.keys())
-        except DelugeWebClientError as e:
-            logger.error(f"Error fetching torrent status on Deluge: {e}")
-            return []
-
-    def pause(self):
-        try:
-            torrent_ids = self.get_all_torrent_ids()
-            if torrent_ids:
-                logger.info(f"Pausing {len(torrent_ids)} torrents on Deluge...")
-                self.client.pause_torrents(torrent_ids)
-                logger.info("Torrents paused successfully on Deluge.")
-            else:
-                logger.info("No torrents to pause on Deluge.")
-        except DelugeWebClientError as e:
-            logger.error(f"Error pausing torrents on Deluge: {e}")
-
-    def resume(self):
-        try:
-            torrent_ids = self.get_all_torrent_ids()
-            if torrent_ids:
-                logger.info(f"Resuming {len(torrent_ids)} torrents on Deluge...")
-                self.client.resume_torrents(torrent_ids)
-                logger.info("Torrents resumed successfully on Deluge.")
-            else:
-                logger.info("No torrents to resume on Deluge.")
-        except DelugeWebClientError as e:
-            logger.error(f"Error resuming torrents on Deluge: {e}")
-
-
-class QbittorrentService(DownloadService):
-    def __init__(self, host, port, username, password):
-        super().__init__()
-        self.qbt_client = qbittorrentapi.Client(
-            host=host,
-            port=port,
-            username=username,
-            password=password,
-        )
-
-    def pause(self):
-        logger.info("Pausing qBittorrent downloads.")
-        self.qbt_client.torrents.pause_all()
-
-    def resume(self):
-        logger.info("Resuming qBittorrent downloads.")
-        self.qbt_client.torrents.resume_all()
 
 
 class MediaSessionManager(ABC):
@@ -302,16 +269,11 @@ class DownloadManager:
 
     def _initialize_services(self):
         services = []
-        if os.getenv('SABNZBD_HOST'):
-            services.append(SABnzbdService(
-                host=os.getenv('SABNZBD_HOST'),
-                port=os.getenv('SABNZBD_PORT', '8080'),
-                api_key=os.getenv('SABNZBD_API_KEY')
-            ))
         if os.getenv('DELUGE_HOST'):
             services.append(DelugeService(
                 host=os.getenv('DELUGE_HOST'),
-                port=os.getenv('DELUGE_PORT', '8112'),
+                port=os.getenv('DELUGE_PORT', '58846'),
+                username=os.getenv('DELUGE_USERNAME'),
                 password=os.getenv('DELUGE_PASSWORD')
             ))
         if os.getenv('QBITTORRENT_HOST'):
@@ -321,6 +283,13 @@ class DownloadManager:
                 username=os.getenv('QBITTORRENT_USERNAME'),
                 password=os.getenv('QBITTORRENT_PASSWORD')
             ))
+        if os.getenv('SABNZBD_HOST'):
+            services.append(SABnzbdService(
+                host=os.getenv('SABNZBD_HOST'),
+                port=os.getenv('SABNZBD_PORT', '8080'),
+                api_key=os.getenv('SABNZBD_API_KEY')
+            ))
+
         return services
 
     def pause_downloads(self):
