@@ -62,11 +62,11 @@ class SABnzbdService(DownloadService):
 
     def pause(self):
         self.logger.info("Pausing SABnzbd downloads.")
-        self.client.pause()
+        self.client.pause_queue()
 
     def resume(self):
         self.logger.info("Resuming SABnzbd downloads.")
-        self.client.resume()
+        self.client.resume_queue()
 
 
 class DelugeService(DownloadService):
