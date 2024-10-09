@@ -1,19 +1,28 @@
 import os
 import requests
 import logging
-
-from deluge_client import DelugeRPCClient
 from flask import Flask, request
+from deluge_client import DelugeRPCClient
 from pysabnzbd import Sabnzbd
 from qbittorrent import Client
+from abc import ABC, abstractmethod
 
 app = Flask(__name__)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Track active playbacks
+active_sessions = {}
 
-class DiscordNotifier:
+
+class Notifier(ABC):
+    @abstractmethod
+    def send_message(self, message: str):
+        pass
+
+
+class DiscordNotifier(Notifier):
     def __init__(self, webhook_url):
         self.webhook_url = webhook_url
 
@@ -28,15 +37,19 @@ class DiscordNotifier:
             raise Exception(f"Failed to send message to Discord: {response.status_code}")
 
 
-class SABnzbdService:
-    def __init__(self, host, port, api_key):
-        self.host = host
-        self.port = port
-        self.api_key = api_key
-        self.client = self._get_client()
+class DownloadService(ABC):
+    @abstractmethod
+    def pause(self):
+        pass
 
-    def _get_client(self):
-        return Sabnzbd(api_key=self.api_key, host=f"http://{self.host}:{self.port}")
+    @abstractmethod
+    def resume(self):
+        pass
+
+
+class SABnzbdService(DownloadService):
+    def __init__(self, host, port, api_key):
+        self.client = Sabnzbd(api_key=api_key, host=f"http://{host}:{port}")
 
     def pause(self):
         logging.info("Pausing SABnzbd downloads.")
@@ -47,18 +60,10 @@ class SABnzbdService:
         self.client.resume()
 
 
-class DelugeService:
+class DelugeService(DownloadService):
     def __init__(self, host, port, username, password):
-        self.host = host
-        self.port = int(port)
-        self.username = username
-        self.password = password
-        self.client = self._get_client()
-
-    def _get_client(self):
-        client = DelugeRPCClient(self.host, self.port, self.username, self.password)
-        client.connect()
-        return client
+        self.client = DelugeRPCClient(host, int(port), username, password)
+        self.client.connect()
 
     def pause(self):
         logging.info("Pausing Deluge downloads.")
@@ -69,17 +74,10 @@ class DelugeService:
         self.client.call('core.resume_all_torrents')
 
 
-class QbittorrentService:
+class QbittorrentService(DownloadService):
     def __init__(self, host, username, password):
-        self.host = host
-        self.username = username
-        self.password = password
-        self.client = self._get_client()
-
-    def _get_client(self):
-        client = Client(self.host)
-        client.login(self.username, self.password)
-        return client
+        self.client = Client(host)
+        self.client.login(username, password)
 
     def pause(self):
         logging.info("Pausing qBittorrent downloads.")
@@ -90,89 +88,171 @@ class QbittorrentService:
         self.client.resumetorrents()
 
 
-def get_event_type(data):
-    # For Jellyfin
-    if "Event" in data:
-        event = data['Event']
-        if event == "media.play":
-            return "play"
-        elif event == "media.stop":
-            return "stop"
+class MediaServerHandler(ABC):
+    """
+    Abstract handler for media server events. Each media server implementation
+    should inherit from this class.
+    """
+    def __init__(self, name):
+        self.name = name
+        self.active_sessions = set()
 
-    # For Plex
-    if "event" in data:
-        event = data['event']
-        if event == "media.play":
-            return "play"
-        elif event == "media.stop":
-            return "stop"
-
-    # For Emby
-    if "NotificationType" in data:
-        event = data['NotificationType']
-        if event == "playbackstart":
-            return "play"
-        elif event == "playbackstop":
-            return "stop"
-
-    return None
+    @abstractmethod
+    def extract_event(self, data):
+        pass
 
 
-def get_download_services():
-    download_services = []
+class JellyfinHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("jellyfin")
 
-    # SABnzbd
-    sabnzbd_host = os.getenv('SABNZBD_HOST')
-    if sabnzbd_host:
-        logging.info("Initializing SABnzbd service.")
-        download_services.append(SABnzbdService(
-            host=sabnzbd_host,
-            port=os.getenv('SABNZBD_PORT', '8080'),
-            api_key=os.getenv('SABNZBD_API_KEY')
-        ))
+    def extract_event(self, data):
+        if "Event" in data and "User" in data:
+            event = data['Event']
+            user = data['User']['Id']
+            if event == "media.play":
+                return "play", user
+            elif event == "media.stop":
+                return "stop", user
+        return None, None
 
-    # Deluge
-    deluge_host = os.getenv('DELUGE_HOST')
-    if deluge_host:
-        logging.info("Initializing Deluge service.")
-        download_services.append(DelugeService(
-            host=deluge_host,
-            port=os.getenv('DELUGE_PORT'),
-            username=os.getenv('DELUGE_USERNAME'),
-            password=os.getenv('DELUGE_PASSWORD')
-        ))
 
-    # qBittorrent
-    qbittorrent_host = os.getenv('QBITTORRENT_HOST')
-    if qbittorrent_host:
-        logging.info("Initializing qBittorrent service.")
-        download_services.append(QbittorrentService(
-            host=qbittorrent_host,
-            username=os.getenv('QBITTORRENT_USERNAME'),
-            password=os.getenv('QBITTORRENT_PASSWORD')
-        ))
+class PlexHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("plex")
 
-        return download_services
+    def extract_event(self, data):
+        if "event" in data and "Account" in data:
+            event = data['event']
+            user = data['Account']['id']
+            if event == "media.play":
+                return "play", user
+            elif event == "media.stop":
+                return "stop", user
+        return None, None
+
+
+class EmbyHandler(MediaServerHandler):
+    def __init__(self):
+        super().__init__("emby")
+
+    def extract_event(self, data):
+        if "NotificationType" in data and "Session" in data:
+            event = data['NotificationType']
+            user = data['Session']['UserId']
+            if event == "playbackstart":
+                return "play", user
+            elif event == "playbackstop":
+                return "stop", user
+        return None, None
+
+
+class MediaSessionManager:
+    """
+    Manager responsible for tracking active sessions across multiple media servers
+    and determining when to pause or resume downloads.
+    """
+    def __init__(self):
+        self.handlers = {
+            "jellyfin": JellyfinHandler(),
+            "plex": PlexHandler(),
+            "emby": EmbyHandler()
+        }
+
+    def update_sessions(self, media_server, user, event_type):
+        handler = self.handlers.get(media_server)
+        if not handler:
+            logging.warning(f"Unknown media server: {media_server}")
+            return
+
+        if event_type == "play":
+            logging.info(f"User {user} started playing media on {media_server}.")
+            handler.active_sessions.add(user)
+        elif event_type == "stop":
+            logging.info(f"User {user} stopped playing media on {media_server}.")
+            handler.active_sessions.discard(user)
+
+    def should_resume_downloads(self):
+        for handler in self.handlers.values():
+            if handler.active_sessions:
+                logging.info(f"Active sessions on {handler.name}: {handler.active_sessions}")
+                return False
+
+        return True
+
+
+class DownloadManager:
+    """
+    Manages pausing and resuming of downloads by communicating with various download services.
+    """
+    def __init__(self, notifier: Notifier):
+        self.notifier = notifier
+        self.download_services = self.get_download_services()
+
+    def get_download_services(self):
+        services = []
+        # SABnzbd
+        if os.getenv('SABNZBD_HOST'):
+            services.append(SABnzbdService(
+                host=os.getenv('SABNZBD_HOST'),
+                port=os.getenv('SABNZBD_PORT', '8080'),
+                api_key=os.getenv('SABNZBD_API_KEY')
+            ))
+        # Deluge
+        if os.getenv('DELUGE_HOST'):
+            services.append(DelugeService(
+                host=os.getenv('DELUGE_HOST'),
+                port=os.getenv('DELUGE_PORT'),
+                username=os.getenv('DELUGE_USERNAME'),
+                password=os.getenv('DELUGE_PASSWORD')
+            ))
+        # qBittorrent
+        if os.getenv('QBITTORRENT_HOST'):
+            services.append(QbittorrentService(
+                host=os.getenv('QBITTORRENT_HOST'),
+                username=os.getenv('QBITTORRENT_USERNAME'),
+                password=os.getenv('QBITTORRENT_PASSWORD')
+            ))
+        return services
+
+    def pause_downloads(self):
+        logging.info("Pausing all download clients.")
+        self.notifier.send_message("Media is playing. Pausing all download clients...")
+        for service in self.download_services:
+            service.pause()
+
+    def resume_downloads(self):
+        logging.info("Resuming all download clients.")
+        self.notifier.send_message("All media stopped. Resuming all download clients...")
+        for service in self.download_services:
+            service.resume()
+
 
 @app.route('/media-webhook', methods=['POST'])
 def media_webhook():
     data = request.json
-    event = get_event_type(data)
+    media_server, user, event_type = None, None, None
 
-    download_services = get_download_services()
+    for server, handler in MediaSessionManager().handlers.items():
+        event_type, user = handler.extract_event(data)
+        if event_type and user:
+            media_server = server
+            break
+
+    if not media_server:
+        logging.warning("Unrecognized event or missing user/server information.")
+        return "Unrecognized event", 400
+
+    session_manager = MediaSessionManager()
+    session_manager.update_sessions(media_server, user, event_type)
+
     notifier = DiscordNotifier(webhook_url=os.getenv('DISCORD_WEBHOOK_URL'))
+    download_manager = DownloadManager(notifier)
 
-    if event == "play":
-        logging.info("Media play event received. Pausing all download clients.")
-        notifier.send_message("Media is playing. Pausing all download clients...")
-        for download_service in download_services:
-            download_service.pause()
-
-    elif event == "stop":
-        logging.info("Media stop event received. Resuming all download clients.")
-        notifier.send_message("Media has stopped. Resuming all download clients...")
-        for download_service in download_services:
-            download_service.resume()
+    if event_type == "play":
+        download_manager.pause_downloads()
+    elif event_type == "stop" and session_manager.should_resume_downloads():
+        download_manager.resume_downloads()
 
     return "OK", 200
 
