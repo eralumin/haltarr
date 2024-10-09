@@ -1,5 +1,3 @@
 deluge-web-client==1.0.4
-gunicorn==23.0.0
-Flask==3.0.3
 qbittorrent-api==2024.9.67
 requests==2.32.3
