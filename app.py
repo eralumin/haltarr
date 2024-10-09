@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 import requests
 import qbittorrentapi
 
+from deluge_web_client import DelugeWebClient, DelugeWebClientError
+
 
 # Configure Python built-in logger
 logging.basicConfig(level=logging.INFO)
@@ -89,61 +91,54 @@ class SABnzbdService(DownloadService):
         self._call_api("resume")
 
 
+from deluge_web_client import DelugeWebClient, DelugeWebClientError
+import logging
+
+logger = logging.getLogger(__name__)
+
 class DelugeService:
     def __init__(self, host, port, password):
-        self.base_url = f'http://{host}:{port}/json'
-        self.session = requests.Session()
-        self.password = password
-        self.host_id = None
-
-    def _call_api(self, method, params=None):
-        if params is None:
-            params = []
-        payload = {
-            "method": method,
-            "params": params,
-            "id": 1
-        }
-        try:
-            response = self.session.post(self.base_url, json=payload)
-            response.raise_for_status()
-            return response.json().get("result", None)
-        except requests.RequestException as e:
-            logger.error(f"Error in Deluge API call: {e}")
-            return None
+        self.client = DelugeWebClient(url=f"http://{host}:{port}/", password=password)
 
     def connect(self):
-        hosts = self._call_api('web.get_hosts')
-        if not hosts:
-            raise Exception("Failed to get hosts")
-
-        # Connect to the first available host
-        self.host_id = hosts[0][0]
-
-        result = self._call_api('web.connect', [self.host_id])
-        if not result:
-            raise Exception("Failed to connect to the Deluge host")
-
-        logger.info(f"Connected to Deluge host {self.host_id}")
+        try:
+            self.client.login()
+            logger.info("Connected to Deluge Web UI successfully.")
+        except DelugeWebClientError as e:
+            logger.error(f"Error connecting to Deluge Web UI: {e}")
+            raise
 
     def get_all_torrent_ids(self):
-        # Get the status of all torrents
-        result = self._call_api('web.update_ui', [['id'], {}])
-        if result and 'torrents' in result:
-            return list(result['torrents'].keys())
-        return []
+        try:
+            torrents_status = self.client.get_torrents_status()
+            return list(torrents_status.result.keys())
+        except DelugeWebClientError as e:
+            logger.error(f"Error fetching torrent status: {e}")
+            return []
 
     def pause(self):
-        torrent_ids = self.get_all_torrent_ids()
-        if torrent_ids:
-            logger.info(f"Pausing {len(torrent_ids)} torrents...")
-            self._call_api('core.pause_torrents', [torrent_ids])
+        try:
+            torrent_ids = self.get_all_torrent_ids()
+            if torrent_ids:
+                logger.info(f"Pausing {len(torrent_ids)} torrents...")
+                self.client.pause_torrents(torrent_ids)
+                logger.info("Torrents paused successfully.")
+            else:
+                logger.info("No torrents to pause.")
+        except DelugeWebClientError as e:
+            logger.error(f"Error pausing torrents: {e}")
 
     def resume(self):
-        torrent_ids = self.get_all_torrent_ids()
-        if torrent_ids:
-            logger.info(f"Resuming {len(torrent_ids)} torrents...")
-            self._call_api('core.resume_torrents', [torrent_ids])
+        try:
+            torrent_ids = self.get_all_torrent_ids()
+            if torrent_ids:
+                logger.info(f"Resuming {len(torrent_ids)} torrents...")
+                self.client.resume_torrents(torrent_ids)
+                logger.info("Torrents resumed successfully.")
+            else:
+                logger.info("No torrents to resume.")
+        except DelugeWebClientError as e:
+            logger.error(f"Error resuming torrents: {e}")
 
 
 class QbittorrentService(DownloadService):
