@@ -281,8 +281,12 @@ session_manager = MediaSessionManager(app.logger)
 
 @app.route('/api/v1/playback-events', methods=['POST'])
 def playback_events():
+    app.logger.debug(f"Received JSON payload: {request.json}")
+
     data = request.json
     media_server, user, event_type = None, None, None
+
+    app.logger.debug("Evaluating media server handlers for event extraction...")
 
     for server, handler in session_manager.handlers.items():
         event_type, user = handler.extract_event(data)
@@ -293,6 +297,8 @@ def playback_events():
     if not media_server:
         app.logger.warning("Unrecognized event or missing user/server information.")
         return "Unrecognized event", 400
+
+    app.logger.debug(f"Extracted event: {event_type} from {media_server} for user {user}")
 
     session_manager.update_sessions(media_server, user, event_type)
 
