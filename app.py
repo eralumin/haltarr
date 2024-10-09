@@ -1,11 +1,13 @@
 import os
-import requests
 import logging
+
+import qbittorrentapi
+import requests
+
+from abc import ABC, abstractmethod
 from flask import Flask, request
 from deluge_client import DelugeRPCClient
 from pysabnzbd import Sabnzbd
-from qbittorrent import Client
-from abc import ABC, abstractmethod
 
 app = Flask(__name__)
 
@@ -75,9 +77,13 @@ class DelugeService(DownloadService):
 
 
 class QbittorrentService(DownloadService):
-    def __init__(self, host, username, password):
-        self.client = Client(host)
-        self.client.login(username, password)
+    def __init__(self, host, port, username, password):
+        self.qbt_client = qbittorrentapi.Client(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+        )
 
     def pause(self):
         logging.info("Pausing qBittorrent downloads.")
@@ -202,7 +208,7 @@ class DownloadManager:
         if os.getenv('DELUGE_HOST'):
             services.append(DelugeService(
                 host=os.getenv('DELUGE_HOST'),
-                port=os.getenv('DELUGE_PORT'),
+                port=os.getenv('DELUGE_PORT', '58846'),
                 username=os.getenv('DELUGE_USERNAME'),
                 password=os.getenv('DELUGE_PASSWORD')
             ))
@@ -210,6 +216,7 @@ class DownloadManager:
         if os.getenv('QBITTORRENT_HOST'):
             services.append(QbittorrentService(
                 host=os.getenv('QBITTORRENT_HOST'),
+                port=os.getenv('QBITTORRENT_PORT', '8080'),
                 username=os.getenv('QBITTORRENT_USERNAME'),
                 password=os.getenv('QBITTORRENT_PASSWORD')
             ))
