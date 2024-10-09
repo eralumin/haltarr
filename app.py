@@ -1,6 +1,7 @@
 import os
 
 from abc import ABC, abstractmethod
+from logging.config import dictConfig
 
 import qbittorrentapi
 import requests
@@ -10,8 +11,20 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-# Setup logging for the app
-app.logger.setLevel('INFO')
+dictConfig({
+    'version': 1,
+    'formatters': {'default': {
+        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+    }},
+    'handlers': {'wsgi': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'default'
+    }},
+    'root': {
+        'level': 'INFO',
+        'handlers': ['wsgi']
+    }
+})
 
 # Track active playbacks
 active_sessions = {}
