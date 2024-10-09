@@ -1,7 +1,6 @@
 import os
 
 from abc import ABC, abstractmethod
-from logging.config import dictConfig
 
 import qbittorrentapi
 import requests
@@ -11,20 +10,11 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-dictConfig({
-    'version': 1,
-    'formatters': {'default': {
-        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
-    }},
-    'handlers': {'wsgi': {
-        'class': 'logging.StreamHandler',
-        'formatter': 'default'
-    }},
-    'root': {
-        'level': 'INFO',
-        'handlers': ['wsgi']
-    }
-})
+# Configure Flask app logging
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
 
 # Track active playbacks
 active_sessions = {}
