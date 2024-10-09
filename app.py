@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import qbittorrentapi
 import requests
 
-from deluge_client import DelugeRPCClient
+from deluge_web_client import DelugeWebClient
 from flask import Flask, request
 
 app = Flask(__name__)
@@ -77,19 +77,35 @@ class SABnzbdService(DownloadService):
         self._call_api("resume")
 
 
-class DelugeService(DownloadService):
-    def __init__(self, host, port, username, password, logger):
+class DelugeWebService(DownloadService):
+    def __init__(self, host, port, password, logger):
         super().__init__(logger)
-        self.client = DelugeRPCClient(host, int(port), username, password)
-        self.client.connect()
+
+        url=f"http://{host}:{port}"
+        self.client = DelugeWebClient(url=url, password=password)
+
+    def _get_torrent_ids_or_empty_list(self):
+        torrents = self.client.get_torrents_status()
+        if torrents.result:
+            return list(torrents.result.keys())
+
+        return list()
 
     def pause(self):
-        self.logger.info("Pausing Deluge downloads.")
-        self.client.call('core.pause_all_torrents')
+        self.logger.info("Pausing Deluge torrents")
+        try:
+            torrent_ids = self._get_torrent_ids_or_empty_list()
+            self.client.pause_torrents(torrent_ids)
+        except Exception as e:
+            self.logger.error(f"Error pausing torrents: {e}")
 
     def resume(self):
-        self.logger.info("Resuming Deluge downloads.")
-        self.client.call('core.resume_all_torrents')
+        self.logger.info("Resuming Deluge torrents")
+        try:
+            torrent_ids = self._get_torrent_ids_or_empty_list()
+            self.client.resume_torrents(torrent_ids)
+        except Exception as e:
+            self.logger.error(f"Error resuming torrents: {e}")
 
 
 class QbittorrentService(DownloadService):
@@ -161,8 +177,7 @@ class DownloadManager:
         if os.getenv('DELUGE_HOST'):
             services.append(DelugeService(
                 host=os.getenv('DELUGE_HOST'),
-                port=os.getenv('DELUGE_PORT', '58846'),
-                username=os.getenv('DELUGE_USERNAME'),
+                port=os.getenv('DELUGE_PORT', '8112'),
                 password=os.getenv('DELUGE_PASSWORD'),
                 logger=self.logger
             ))

@@ -1,4 +1,4 @@
-deluge-client==1.10.2
+deluge-web-client==1.0.4
 Flask==3.0.3
 qbittorrent-api==2024.9.67
 requests==2.32.3
