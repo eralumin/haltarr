@@ -10,6 +10,16 @@
 - Pauses/Resumes SABnzbd, qBitTorrent and Deluge download clients based on media playback in Jellyfin, Plex and Emby.
 - Sends notifications to Discord.
 
+## Summary
+- [Setup](#setup)
+  - [Environment Variables](#environment-variables)
+  - [Running the App Locally](#running-the-app-locally)
+  - [Running with Docker](#running-with-docker)
+- [Adding Webhooks to Jellyfin, Plex, and Emby](#adding-webhooks-to-jellyfin-plex-and-emby)
+  - [Jellyfin Webhook Setup](#jellyfin-webhook-setup)
+  - [Plex Webhook Setup](#plex-webhook-setup)
+  - [Emby Webhook Setup](#emby-webhook-setup)
+
 ## Setup
 
 ### Environment Variables
@@ -37,6 +47,37 @@ Build and run the Docker container:
     docker run -d -p 5000:5000 --env-file .env eralumin/controllarr
 ```
 
-## Deployment with GitHub Actions
-Automatically builds a new Docker image on every push to main and increments the version.
-The image is pushed to Docker Hub under eralumin/controllarr.
+### Adding Webhooks to Jellyfin, Plex, and Emby
+
+#### Jellyfin Webhook Setup
+To configure Jellyfin to send media events to Haltarr:
+1. Open Jellyfin and go to Dashboard.
+2. Navigate to Notifications and click on the Webhook tab.
+3. Add a new webhook with the following information:
+  - **Webhook Name:** Haltarr
+  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
+  - **Notification Types:**
+    - `Playback Start`
+    - `Playback Stop`
+4. Click Save to apply the webhook.
+
+#### Plex Webhook Setup
+To configure Plex to send media events to Haltarr:
+
+1. Open Plex and go to Settings.
+2. Navigate to Webhooks under the Account settings.
+3. Click on Add Webhook and enter the following URL:
+  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
+4. Click Save to add the webhook.
+
+#### Emby Webhook Setup
+To configure Emby to send media events to Haltarr:
+
+1. Open Emby and go to Settings.
+2. Navigate to Webhooks in the settings menu.
+3. Add a new webhook with the following details:
+  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
+4. Select the appropriate events to track:
+  - `playbackstart`
+  - `playbackstop`
+5. Click Save to apply the webhook.
