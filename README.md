@@ -15,20 +15,39 @@
   - [Environment Variables](#environment-variables)
   - [Running the App Locally](#running-the-app-locally)
   - [Running with Docker](#running-with-docker)
-- [Adding Webhooks to Jellyfin, Plex, and Emby](#adding-webhooks-to-jellyfin-plex-and-emby)
-  - [Jellyfin Webhook Setup](#jellyfin-webhook-setup)
-  - [Plex Webhook Setup](#plex-webhook-setup)
-  - [Emby Webhook Setup](#emby-webhook-setup)
 
 ## Setup
 
 ### Environment Variables
-- `DISCORD_WEBHOOK_URL`: Your Discord webhook URL to send notifications.
+Set the following environment variables to configure Haltarr:
+
+#### Media Servers
+- `JELLYFIN_HOST`: Hostname or IP of your Jellyfin server.
+- `JELLYFIN_PORT`: Port for Jellyfin (default: `8096`).
+- `JELLYFIN_API_KEY`: API key for Jellyfin.
+  
+- `PLEX_HOST`: Hostname or IP of your Plex server.
+- `PLEX_PORT`: Port for Plex (default: `32400`).
+- `PLEX_API_KEY`: API key for Plex.
+  
+- `EMBY_HOST`: Hostname or IP of your Emby server.
+- `EMBY_PORT`: Port for Emby (default: `8096`).
+- `EMBY_API_KEY`: API key for Emby.
+
+#### Download Clients
+- `SABNZBD_HOST`: Hostname or IP of your SABnzbd server.
+- `SABNZBD_PORT`: Port for SABnzbd (default: `8080`).
 - `SABNZBD_API_KEY`: API key for SABnzbd.
-- `DELUGE_HOST`: Host for Deluge.
-- `DELUGE_PORT`: Port for Deluge.
-- `DELUGE_USERNAME`: Username for Deluge.
+
+- `DELUGE_HOST`: Hostname or IP of your Deluge server.
+- `DELUGE_PORT`: Port for Deluge (default: `8112`).
 - `DELUGE_PASSWORD`: Password for Deluge.
+
+- `QBITTORRENT_HOST`: Hostname or IP of your qBitTorrent server.
+- `QBITTORRENT_PORT`: Port for qBitTorrent (default: `8080`).
+- `QBITTORRENT_USERNAME`: Username for qBitTorrent.
+- `QBITTORRENT_PASSWORD`: Password for qBitTorrent.
+
 
 ### Running the app locally
 1. Install the dependencies:
@@ -46,41 +65,3 @@ Build and run the Docker container:
     docker build -t eralumin/controllarr .
     docker run -d -p 5000:5000 --env-file .env eralumin/controllarr
 ```
-
-### Adding Webhooks to Jellyfin, Plex, and Emby
-
-#### Jellyfin Webhook Setup
-To configure Jellyfin to send media events to Haltarr:
-1. Open Jellyfin and go to Dashboard.
-2. Navigate to Notifications and click on the Webhook tab.
-3. Add a new webhook with the following information:
-  - **Webhook Name:** Haltarr
-  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
-  - **Notification Types:**
-    - `Playback Start`
-    - `Playback Stop`
-  - **Request Headers:**
-    - **Key:** Content-Type
-      **Value:** application/json
-4. Click Save to apply the webhook.
-
-#### Plex Webhook Setup
-To configure Plex to send media events to Haltarr:
-
-1. Open Plex and go to Settings.
-2. Navigate to Webhooks under the Account settings.
-3. Click on Add Webhook and enter the following URL:
-  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
-4. Click Save to add the webhook.
-
-#### Emby Webhook Setup
-To configure Emby to send media events to Haltarr:
-
-1. Open Emby and go to Settings.
-2. Navigate to Webhooks in the settings menu.
-3. Add a new webhook with the following details:
-  - **Webhook URL:** http://Haltarr:5000/api/v1/media-events
-4. Select the appropriate events to track:
-  - `playbackstart`
-  - `playbackstop`
-5. Click Save to apply the webhook.
