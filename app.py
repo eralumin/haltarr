@@ -64,7 +64,7 @@ class DownloadService(ABC):
 class DelugeService(DownloadService):
     def __init__(self, host, port, username, password):
         super().__init__()
-        self.client = DelugeRPCClient(host, port, username, password)
+        self.client = DelugeRPCClient(host, int(port), username, password)
 
     def connect(self):
         try:
