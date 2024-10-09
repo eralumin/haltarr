@@ -29,9 +29,9 @@ class DiscordNotifier(Notifier):
             raise ValueError("Discord Webhook URL is not set.")
 
         data = {
-            "content": null,
+            "content": None,
             "embeds": [
-                  {
+                {
                     "title": title,
                     "description": message,
                     "color": 5814783
@@ -109,7 +109,7 @@ class DelugeService:
             response.raise_for_status()
             return response.json().get("result", None)
         except requests.RequestException as e:
-            print(f"Error in Deluge API call: {e}")
+            logger.error(f"Error in Deluge API call: {e}")
             return None
 
     def connect(self):
@@ -119,10 +119,12 @@ class DelugeService:
 
         # Connect to the first available host
         self.host_id = hosts[0][0]
+
         result = self._call_api('web.connect', [self.host_id])
         if not result:
             raise Exception("Failed to connect to the Deluge host")
-        print(f"Connected to Deluge host {self.host_id}")
+
+        logger.info(f"Connected to Deluge host {self.host_id}")
 
     def get_all_torrent_ids(self):
         # Get the status of all torrents
@@ -134,13 +136,13 @@ class DelugeService:
     def pause(self):
         torrent_ids = self.get_all_torrent_ids()
         if torrent_ids:
-            print(f"Pausing {len(torrent_ids)} torrents...")
+            logger.info(f"Pausing {len(torrent_ids)} torrents...")
             self._call_api('core.pause_torrents', [torrent_ids])
 
     def resume(self):
         torrent_ids = self.get_all_torrent_ids()
         if torrent_ids:
-            print(f"Resuming {len(torrent_ids)} torrents...")
+            logger.info(f"Resuming {len(torrent_ids)} torrents...")
             self._call_api('core.resume_torrents', [torrent_ids])
 
 
@@ -235,6 +237,7 @@ class EmbyMediaServer(MediaSessionManager):
 class MediaServerManager:
     def __init__(self):
         self.media_servers = []
+        self.has_already_activity = False
 
         # Initialize Jellyfin if environment variables are set
         if os.getenv('JELLYFIN_HOST'):
@@ -265,6 +268,19 @@ class MediaServerManager:
             if media_server.has_active_sessions():
                 return True
         return False
+
+    def check_and_notify(self, download_manager):
+        has_active_sessions = self.has_active_sessions()
+        is_activity_just_started =  has_active_sessions and not self.has_already_activity
+        is_activity_just_stopped = not is_playing and self.has_already_activity
+
+        if is_activity_just_started:
+            self.has_already_activity = True
+            download_manager.pause_downloads()
+
+        elif is_activity_just_stopped:
+            self.has_already_activity = False
+            download_manager.resume_downloads()
 
 
 class DownloadManager:
@@ -298,7 +314,7 @@ class DownloadManager:
     def pause_downloads(self):
         logger.info("Pausing all download clients.")
         self.notifier.send_message(
-            title="Activity on Media Servers."
+            title="Activity on Media Servers.",
             message="Pausing all download clients..."
         )
 
@@ -308,7 +324,7 @@ class DownloadManager:
     def resume_downloads(self):
         logger.info("Resuming all download clients.")
         self.notifier.send_message(
-            title="No activity on Media Servers."
+            title="No activity on Media Servers.",
             message="Resuming all download clients..."
         )
 
@@ -326,13 +342,10 @@ def main():
 
     while True:
         logger.info("Checking media server sessions...")
-        if media_server_manager.has_active_sessions():
-            download_manager.pause_downloads()
-        else:
-            download_manager.resume_downloads()
-
+        media_server_manager.check_and_notify(download_manager)
         logger.info(f"Sleeping for {check_interval} seconds.")
         time.sleep(check_interval)
+
 
 if __name__ == '__main__':
     main()
