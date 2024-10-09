@@ -1,10 +1,11 @@
 import os
 import logging
 
+from abc import ABC, abstractmethod
+
 import qbittorrentapi
 import requests
 
-from abc import ABC, abstractmethod
 from flask import Flask, request
 from deluge_client import DelugeRPCClient
 from pysabnzbd import SabnzbdApi
@@ -12,7 +13,19 @@ from pysabnzbd import SabnzbdApi
 app = Flask(__name__)
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log_format = '%(asctime)s - %(levelname)s - %(message)s'
+logging.basicConfig(level=logging.INFO, format=log_format)
+
+# Integrate Flask logging with your logger
+flask_logger = logging.getLogger('werkzeug') # The default Flask logger
+flask_logger.setLevel(logging.INFO)
+handler = logging.StreamHandler() # Stream handler to ensure logging goes to stdout for Docker
+handler.setFormatter(logging.Formatter(log_format))
+flask_logger.addHandler(handler)
+
+# Add handler to the root logger as well
+root_logger = logging.getLogger()
+root_logger.addHandler(handler)
 
 # Track active playbacks
 active_sessions = {}
@@ -78,7 +91,7 @@ class DelugeService(DownloadService):
 
 class QbittorrentService(DownloadService):
     def __init__(self, host, port, username, password):
-        self.qbt_client = qbittorrentapi.Client(
+        self.client = qbittorrentapi.Client(
             host=host,
             port=port,
             username=username,
@@ -87,18 +100,14 @@ class QbittorrentService(DownloadService):
 
     def pause(self):
         logging.info("Pausing qBittorrent downloads.")
-        self.client.pausetorrents()
+        self.client.torrents.pause_all()
 
     def resume(self):
         logging.info("Resuming qBittorrent downloads.")
-        self.client.resumetorrents()
+        self.client.torrents.resume_all()
 
 
 class MediaServerHandler(ABC):
-    """
-    Abstract handler for media server events. Each media server implementation
-    should inherit from this class.
-    """
     def __init__(self, name):
         self.name = name
         self.active_sessions = set()
@@ -154,10 +163,6 @@ class EmbyHandler(MediaServerHandler):
 
 
 class MediaSessionManager:
-    """
-    Manager responsible for tracking active sessions across multiple media servers
-    and determining when to pause or resume downloads.
-    """
     def __init__(self):
         self.handlers = {
             "jellyfin": JellyfinHandler(),
@@ -183,14 +188,10 @@ class MediaSessionManager:
             if handler.active_sessions:
                 logging.info(f"Active sessions on {handler.name}: {handler.active_sessions}")
                 return False
-
         return True
 
 
 class DownloadManager:
-    """
-    Manages pausing and resuming of downloads by communicating with various download services.
-    """
     def __init__(self, notifier: Notifier):
         self.notifier = notifier
         self.download_services = self.get_download_services()
