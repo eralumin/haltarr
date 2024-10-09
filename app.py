@@ -55,8 +55,12 @@ class SABnzbdService(DownloadService):
 
     def _call_api(self, mode):
         try:
-            url = f"{self.base_url}?mode={mode}&apikey={self.api_key}"
-            response = requests.get(url)
+            params = {
+                "mode": mode,
+                "apikey": self.api_key
+            }
+            response = requests.get(self.base_url, params=params)
+
             if response.status_code == 200:
                 logger.info(f"SABnzbd {mode} successful.")
             else:
