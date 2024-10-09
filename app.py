@@ -115,13 +115,13 @@ class DelugeService:
             return list(result['torrents'].keys())
         return []
 
-    def pause_all_torrents(self):
+    def pause(self):
         torrent_ids = self.get_all_torrent_ids()
         if torrent_ids:
             print(f"Pausing {len(torrent_ids)} torrents...")
             self._call_api('core.pause_torrents', [torrent_ids])
 
-    def resume_all_torrents(self):
+    def resume(self):
         torrent_ids = self.get_all_torrent_ids()
         if torrent_ids:
             print(f"Resuming {len(torrent_ids)} torrents...")
