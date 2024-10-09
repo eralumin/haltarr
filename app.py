@@ -235,7 +235,7 @@ class DownloadManager:
             service.resume()
 
 
-@app.route('/playback-events', methods=['POST'])
+@app.route('/api/v1/playback-events', methods=['POST'])
 def playback_events():
     data = request.json
     media_server, user, event_type = None, None, None
