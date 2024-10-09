@@ -272,7 +272,7 @@ class MediaServerManager:
     def check_and_notify(self, download_manager):
         has_active_sessions = self.has_active_sessions()
         is_activity_just_started =  has_active_sessions and not self.has_already_activity
-        is_activity_just_stopped = not is_playing and self.has_already_activity
+        is_activity_just_stopped = not has_active_sessions and self.has_already_activity
 
         if is_activity_just_started:
             self.has_already_activity = True
