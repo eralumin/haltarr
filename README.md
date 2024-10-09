@@ -4,12 +4,11 @@
 
 # Haltarr
 
-**Haltarr** is a Python Flask-based service that pauses or resumes download clients (SABnzbd, Deluge, qBitTorrent) when media is played or stopped in media servers (Jellyfin, Plex,Emby). It also notifies Discord of these events via webhooks.
+**Haltarr** is a Python Flask-based service that pauses or resumes download clients (SABnzbd, Deluge, qBitTorrent) when media is played or stopped on media servers (Jellyfin, Plex,Emby). It also notifies Discord of these events via webhooks.
 
 ## Features
-- Pauses/Resumes SABnzbd and Deluge download clients based on media playback in Jellyfin.
+- Pauses/Resumes SABnzbd, qBitTorrent and Deluge download clients based on media playback in Jellyfin, Plex and Emby.
 - Sends notifications to Discord.
-- Automatically builds and deploys as a Docker image via GitHub Actions.
 
 ## Setup
 
