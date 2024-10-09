@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class Notifier(ABC):
     @abstractmethod
-    def send_message(self, message: str):
+    def send_message(self, title: str, message: str):
         pass
 
 
@@ -23,11 +23,23 @@ class DiscordNotifier(Notifier):
     def __init__(self, webhook_url):
         self.webhook_url = webhook_url
 
-    def send_message(self, message):
+    def send_message(self, title, message):
         if not self.webhook_url:
             logger.error("Discord Webhook URL is not set.")
             raise ValueError("Discord Webhook URL is not set.")
-        data = {"content": message}
+
+        data = {
+            "content": null,
+            "embeds": [
+                  {
+                    "title": title,
+                    "description": message,
+                    "color": 5814783
+                }
+            ],
+            "attachments": []
+        }
+
         response = requests.post(self.webhook_url, json=data)
         if response.status_code != 204:
             logger.error(f"Failed to send message to Discord: {response.status_code}")
@@ -285,13 +297,21 @@ class DownloadManager:
 
     def pause_downloads(self):
         logger.info("Pausing all download clients.")
-        self.notifier.send_message("Media is playing. Pausing all download clients...")
+        self.notifier.send_message(
+            title="Activity on Media Servers."
+            message="Pausing all download clients..."
+        )
+
         for service in self.download_services:
             service.pause()
 
     def resume_downloads(self):
         logger.info("Resuming all download clients.")
-        self.notifier.send_message("All media stopped. Resuming all download clients...")
+        self.notifier.send_message(
+            title="No activity on Media Servers."
+            message="Resuming all download clients..."
+        )
+
         for service in self.download_services:
             service.resume()
 
