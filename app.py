@@ -113,32 +113,32 @@ class DelugeService:
             torrents_status = self.client.get_torrents_status()
             return list(torrents_status.result.keys())
         except DelugeWebClientError as e:
-            logger.error(f"Error fetching torrent status: {e}")
+            logger.error(f"Error fetching torrent status on Deluge: {e}")
             return []
 
     def pause(self):
         try:
             torrent_ids = self.get_all_torrent_ids()
             if torrent_ids:
-                logger.info(f"Pausing {len(torrent_ids)} torrents...")
+                logger.info(f"Pausing {len(torrent_ids)} torrents on Deluge...")
                 self.client.pause_torrents(torrent_ids)
-                logger.info("Torrents paused successfully.")
+                logger.info("Torrents paused successfully on Deluge.")
             else:
-                logger.info("No torrents to pause.")
+                logger.info("No torrents to pause on Deluge.")
         except DelugeWebClientError as e:
-            logger.error(f"Error pausing torrents: {e}")
+            logger.error(f"Error pausing torrents on Deluge: {e}")
 
     def resume(self):
         try:
             torrent_ids = self.get_all_torrent_ids()
             if torrent_ids:
-                logger.info(f"Resuming {len(torrent_ids)} torrents...")
+                logger.info(f"Resuming {len(torrent_ids)} torrents on Deluge...")
                 self.client.resume_torrents(torrent_ids)
-                logger.info("Torrents resumed successfully.")
+                logger.info("Torrents resumed successfully on Deluge.")
             else:
-                logger.info("No torrents to resume.")
+                logger.info("No torrents to resume on Deluge.")
         except DelugeWebClientError as e:
-            logger.error(f"Error resuming torrents: {e}")
+            logger.error(f"Error resuming torrents on Deluge: {e}")
 
 
 class QbittorrentService(DownloadService):
